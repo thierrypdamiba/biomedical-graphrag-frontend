@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { DetailedTracePanel } from "@/components/ui/detailed-trace-panel";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
+import { FormattedResponse } from "@/components/ui/formatted-response";
 import { useAppStore } from "@/store/app-store";
 import { cn, formatLatency } from "@/lib/utils";
 
@@ -258,9 +259,13 @@ export default function AssistantPage() {
                 <span>•</span>
                 <span>{message.timestamp.toLocaleTimeString()}</span>
               </div>
-              <div className="whitespace-pre-wrap text-[var(--text-primary)]">
-                {message.content}
-              </div>
+              {message.role === "assistant" ? (
+                <FormattedResponse content={message.content} />
+              ) : (
+                <div className="text-[var(--text-primary)]">
+                  {message.content}
+                </div>
+              )}
               {message.role === "assistant" && message.metadata && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--stroke-1)] pt-3">
                   <Chip variant="default">
