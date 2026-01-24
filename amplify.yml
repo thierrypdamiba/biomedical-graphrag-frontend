@@ -8,9 +8,10 @@ frontend:
         - pnpm install
     build:
       commands:
+        - env | grep -E "^(GRAPHRAG|NEXT)" || true
         - pnpm run build
   artifacts:
-    baseDirectory: .next
+    baseDirectory: .amplify-hosting
     files:
       - '**/*'
   cache:
