@@ -103,7 +103,11 @@ export default function AssistantPage() {
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
+  const [streamingContent, setStreamingContent] = React.useState("");
+  const [currentStage, setCurrentStage] = React.useState<string | undefined>();
+  const [stageMessage, setStageMessage] = React.useState<string | undefined>();
   const [selectedTraceStep, setSelectedTraceStep] = React.useState<TraceStep | null>(null);
+  const [streamingMetadata, setStreamingMetadata] = React.useState<Partial<MessageMetadata> | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -132,9 +136,13 @@ export default function AssistantPage() {
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    setStreamingContent("");
+    setCurrentStage(undefined);
+    setStageMessage(undefined);
+    setStreamingMetadata(null);
 
     try {
-      const response = await fetch("/api/search", {
+      const response = await fetch("/api/search-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -144,46 +152,88 @@ export default function AssistantPage() {
         }),
       });
 
-      const data = await response.json();
-
-      let content = "";
-
-      // If GraphRAG returned a summary, use it
-      if (data.summary) {
-        content = data.summary;
-      } else if (data.results && data.results.length > 0) {
-        // Fallback: build content from results
-        content = `Found ${data.results.length} relevant papers for "${query}":\n\n`;
-        data.results.slice(0, 5).forEach((result: SearchResult, i: number) => {
-          const paper = result.payload?.paper;
-          const pmid = paper?.pmid || String(result.id);
-          const title = paper?.title || "Untitled";
-          const authors = paper?.authors?.slice(0, 2).map((a: { name?: string }) => a.name).join(", ");
-          const journal = paper?.journal || "";
-          content += `${i + 1}. **PMID:${pmid}** - ${title}${authors ? ` (${authors})` : ""}${journal ? ` - ${journal}` : ""}\n\n`;
-        });
-      } else {
-        content = `No results found for "${query}". Try different search terms.`;
+      if (!response.ok) {
+        throw new Error("Stream request failed");
       }
 
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content,
-        timestamp: new Date(),
-        metadata: {
-          collection: data.metadata?.collection || activeCollection || "biomedical_papers",
-          vectorMode: data.metadata?.mode || vectorMode,
-          latency: data.metadata?.totalLatency || 0,
-          results: data.results || [],
-          trace: data.trace || [],
-          query,
-          qdrant_results: data.metadata?.qdrant_results,
-          neo4j_results: data.metadata?.neo4j_results,
-          toolsUsed: data.metadata?.toolsUsed,
-        },
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("No reader available");
+      }
+
+      let accumulatedContent = "";
+      let metadata: Partial<MessageMetadata> = {
+        collection: activeCollection || "biomedical_papers",
+        vectorMode: vectorMode as "dense" | "sparse" | "hybrid",
+        query,
+        results: [],
+        trace: [],
+        latency: 0,
       };
-      setMessages((prev) => [...prev, assistantMessage]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              switch (data.type) {
+                case "status":
+                  setCurrentStage(data.stage);
+                  setStageMessage(data.message);
+                  break;
+
+                case "metadata":
+                  metadata = {
+                    ...metadata,
+                    results: data.results || [],
+                    trace: data.trace || [],
+                    latency: data.metadata?.totalLatency || 0,
+                    qdrant_results: data.metadata?.qdrant_results,
+                    neo4j_results: data.metadata?.neo4j_results,
+                    toolsUsed: data.metadata?.toolsUsed,
+                  };
+                  setStreamingMetadata(metadata);
+                  break;
+
+                case "content":
+                  accumulatedContent += data.text;
+                  setStreamingContent(accumulatedContent);
+                  break;
+
+                case "done":
+                  // Create the final message
+                  const assistantMessage: Message = {
+                    id: crypto.randomUUID(),
+                    role: "assistant",
+                    content: accumulatedContent || `No results found for "${query}".`,
+                    timestamp: new Date(),
+                    metadata: metadata as MessageMetadata,
+                  };
+                  setMessages((prev) => [...prev, assistantMessage]);
+                  setStreamingContent("");
+                  setCurrentStage(undefined);
+                  setStageMessage(undefined);
+                  setStreamingMetadata(null);
+                  break;
+
+                case "error":
+                  throw new Error(data.message);
+              }
+            } catch (parseError) {
+              // Skip malformed JSON
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error("Search error:", error);
       const errorMessage: Message = {
@@ -193,6 +243,10 @@ export default function AssistantPage() {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+      setStreamingContent("");
+      setCurrentStage(undefined);
+      setStageMessage(undefined);
+      setStreamingMetadata(null);
     } finally {
       setIsLoading(false);
     }
@@ -310,7 +364,22 @@ export default function AssistantPage() {
               )}
             </div>
           ))}
-          {isLoading && <ThinkingIndicator />}
+          {isLoading && !streamingContent && (
+            <ThinkingIndicator currentStage={currentStage} message={stageMessage} />
+          )}
+          {streamingContent && (
+            <div className="rounded-lg bg-[var(--bg-1)] p-4 animate-fade-in">
+              <div className="mb-1 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+                <span className="font-medium">Assistant</span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--emerald)]" />
+                  Streaming...
+                </span>
+              </div>
+              <FormattedResponse content={streamingContent} />
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 

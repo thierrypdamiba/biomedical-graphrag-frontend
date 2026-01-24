@@ -1,45 +1,61 @@
 "use client";
 
 import * as React from "react";
-import { Search, GitBranch, Wrench, Brain, Sparkles } from "lucide-react";
+import { Search, GitBranch, Wrench, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ThinkingStage {
+  id: string;
   icon: React.ElementType;
   label: string;
   color: string;
 }
 
 const stages: ThinkingStage[] = [
-  { icon: Search, label: "Running vector search", color: "text-blue-400" },
-  { icon: GitBranch, label: "Enriching with graph", color: "text-violet-400" },
-  { icon: Wrench, label: "Selecting tools", color: "text-amber-400" },
-  { icon: Brain, label: "Generating response", color: "text-emerald-400" },
+  { id: "search", icon: Search, label: "Running vector search", color: "text-blue-400" },
+  { id: "graph", icon: GitBranch, label: "Enriching with graph", color: "text-violet-400" },
+  { id: "tools", icon: Wrench, label: "Processing results", color: "text-amber-400" },
+  { id: "generate", icon: Brain, label: "Generating response", color: "text-emerald-400" },
 ];
 
-export function ThinkingIndicator() {
-  const [activeStage, setActiveStage] = React.useState(0);
+interface ThinkingIndicatorProps {
+  currentStage?: string;
+  message?: string;
+}
+
+export function ThinkingIndicator({ currentStage, message }: ThinkingIndicatorProps) {
+  const [autoStage, setAutoStage] = React.useState(0);
   const [dots, setDots] = React.useState("");
 
+  // Find the index of the current stage if provided
+  const stageIndex = currentStage
+    ? stages.findIndex(s => s.id === currentStage)
+    : autoStage;
+
+  const activeIndex = stageIndex >= 0 ? stageIndex : autoStage;
+
   React.useEffect(() => {
-    // Cycle through stages
+    // Only auto-cycle if no currentStage is provided
+    if (currentStage) return;
+
     const stageInterval = setInterval(() => {
-      setActiveStage((prev) => (prev + 1) % stages.length);
+      setAutoStage((prev) => (prev + 1) % stages.length);
     }, 2000);
 
-    // Animate dots
+    return () => clearInterval(stageInterval);
+  }, [currentStage]);
+
+  React.useEffect(() => {
     const dotsInterval = setInterval(() => {
       setDots((prev) => (prev.length >= 3 ? "" : prev + "."));
     }, 400);
 
-    return () => {
-      clearInterval(stageInterval);
-      clearInterval(dotsInterval);
-    };
+    return () => clearInterval(dotsInterval);
   }, []);
 
-  const currentStage = stages[activeStage];
-  const Icon = currentStage.icon;
+  const stage = stages[activeIndex];
+  const Icon = stage.icon;
+  const displayMessage = message || stage.label;
 
   return (
     <div className="rounded-lg bg-[var(--bg-1)] p-4">
@@ -47,29 +63,29 @@ export function ThinkingIndicator() {
         {/* Animated icon container */}
         <div className="relative">
           <div className="absolute inset-0 animate-ping opacity-20">
-            <Icon className={cn("h-5 w-5", currentStage.color)} />
+            <Icon className={cn("h-5 w-5", stage.color)} />
           </div>
           <Icon
             className={cn(
               "h-5 w-5 transition-all duration-500",
-              currentStage.color
+              stage.color
             )}
           />
         </div>
 
         {/* Stage label */}
         <span className="text-sm text-[var(--text-secondary)] transition-all duration-300">
-          {currentStage.label}
+          {displayMessage}
           <span className="inline-block w-6">{dots}</span>
         </span>
       </div>
 
       {/* Stage indicators */}
       <div className="mt-3 flex items-center gap-2">
-        {stages.map((stage, i) => {
-          const StageIcon = stage.icon;
-          const isActive = i === activeStage;
-          const isPast = i < activeStage;
+        {stages.map((s, i) => {
+          const StageIcon = s.icon;
+          const isActive = i === activeIndex;
+          const isPast = i < activeIndex;
 
           return (
             <div
@@ -90,7 +106,7 @@ export function ThinkingIndicator() {
                 <StageIcon
                   className={cn(
                     "h-3 w-3 transition-all duration-300",
-                    isActive && stage.color,
+                    isActive && s.color,
                     isPast && "text-[var(--text-tertiary)]",
                     !isActive && !isPast && "text-[var(--text-tertiary)]/50"
                   )}
