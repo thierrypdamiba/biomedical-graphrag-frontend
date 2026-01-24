@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DetailedTracePanel } from "@/components/ui/detailed-trace-panel";
+import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { useAppStore } from "@/store/app-store";
 import { cn, formatLatency } from "@/lib/utils";
 
@@ -304,14 +305,7 @@ export default function AssistantPage() {
               )}
             </div>
           ))}
-          {isLoading && (
-            <div className="rounded-lg bg-[var(--bg-1)] p-4">
-              <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-[var(--violet)]" />
-                Running...
-              </div>
-            </div>
-          )}
+          {isLoading && <ThinkingIndicator />}
           <div ref={messagesEndRef} />
         </div>
 
