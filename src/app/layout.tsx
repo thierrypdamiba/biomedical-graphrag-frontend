@@ -7,10 +7,6 @@ export const metadata: Metadata = {
   description: "AI-powered biomedical research assistant combining Qdrant vector search with Neo4j knowledge graphs",
   keywords: ["biomedical", "GraphRAG", "Qdrant", "Neo4j", "PubMed", "research", "AI"],
   authors: [{ name: "Biomedical GraphRAG Team" }],
-  icons: {
-    icon: "/qdrant-logo.png",
-    apple: "/qdrant-logo.png",
-  },
   openGraph: {
     title: "Biomedical GraphRAG",
     description: "AI-powered biomedical research assistant combining Qdrant vector search with Neo4j knowledge graphs",

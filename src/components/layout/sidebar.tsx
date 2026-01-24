@@ -113,12 +113,12 @@ export function Sidebar() {
           <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] mb-2">
             Powered by
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <a
               href="https://qdrant.tech"
               target="_blank"
               rel="noopener noreferrer"
-              className="opacity-70 hover:opacity-100 transition-opacity"
+              className="opacity-80 hover:opacity-100 transition-opacity"
               title="Qdrant Vector Database"
             >
               <Image
@@ -132,14 +132,14 @@ export function Sidebar() {
               href="https://neo4j.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="opacity-70 hover:opacity-100 transition-opacity"
+              className="px-2 py-1 rounded bg-white hover:bg-gray-100 transition-all"
               title="Neo4j Graph Database"
             >
               <Image
                 src="/neo4j-logo.png"
                 alt="Neo4j"
-                width={60}
-                height={24}
+                width={50}
+                height={20}
                 className="object-contain"
               />
             </a>

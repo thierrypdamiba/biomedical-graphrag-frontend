@@ -87,36 +87,37 @@ export default function Home() {
       </div>
 
       {/* Powered By Section */}
-      <div className="border-t border-[var(--stroke-1)] bg-[var(--bg-1)]">
+      <div className="border-t border-[var(--stroke-1)]">
         <div className="max-w-6xl mx-auto px-6 py-12">
           <p className="text-center text-sm text-[var(--text-tertiary)] mb-6">
             POWERED BY
           </p>
-          <div className="flex items-center justify-center gap-12 flex-wrap">
+          <div className="flex items-center justify-center gap-8 flex-wrap">
             <a
               href="https://qdrant.tech"
               target="_blank"
               rel="noopener noreferrer"
-              className="opacity-60 hover:opacity-100 transition-opacity"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all border border-[var(--stroke-1)]"
             >
               <Image
                 src="/qdrant-logo.png"
                 alt="Qdrant"
-                width={48}
-                height={48}
+                width={32}
+                height={32}
               />
+              <span className="text-[var(--text-primary)] font-medium">Qdrant</span>
             </a>
             <a
               href="https://neo4j.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="opacity-60 hover:opacity-100 transition-opacity"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white hover:bg-gray-100 transition-all border border-gray-200"
             >
               <Image
                 src="/neo4j-logo.png"
                 alt="Neo4j"
-                width={120}
-                height={48}
+                width={80}
+                height={32}
                 className="object-contain"
               />
             </a>
