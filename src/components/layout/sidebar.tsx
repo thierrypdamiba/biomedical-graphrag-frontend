@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   MessageSquare,
@@ -54,22 +55,13 @@ export function Sidebar() {
       {/* Header */}
       <div className="flex h-14 items-center justify-between gap-3 border-b border-[var(--stroke-1)] px-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--violet)]">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <circle cx="12" cy="12" r="3" stroke="white" strokeWidth="2" />
-              <circle cx="12" cy="4" r="2" fill="white" />
-              <circle cx="12" cy="20" r="2" fill="white" />
-              <circle cx="4" cy="12" r="2" fill="white" />
-              <circle cx="20" cy="12" r="2" fill="white" />
-              <path d="M12 6V9M12 15V18M6 12H9M15 12H18" stroke="white" strokeWidth="1.5" />
-            </svg>
-          </div>
+          <Image
+            src="/qdrant-logo.png"
+            alt="Qdrant"
+            width={32}
+            height={32}
+            className="shrink-0"
+          />
           {(!sidebarCollapsed || mobileMenuOpen) && (
             <span className="font-semibold text-[var(--text-primary)]">
               BioMed GraphRAG
@@ -115,7 +107,47 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* Footer - hide on mobile */}
+      {/* Powered by section */}
+      {(!sidebarCollapsed || mobileMenuOpen) && (
+        <div className="border-t border-[var(--stroke-1)] px-4 py-3">
+          <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] mb-2">
+            Powered by
+          </p>
+          <div className="flex items-center gap-3">
+            <a
+              href="https://qdrant.tech"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="opacity-70 hover:opacity-100 transition-opacity"
+              title="Qdrant Vector Database"
+            >
+              <Image
+                src="/qdrant-logo.png"
+                alt="Qdrant"
+                width={24}
+                height={24}
+              />
+            </a>
+            <a
+              href="https://neo4j.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="opacity-70 hover:opacity-100 transition-opacity"
+              title="Neo4j Graph Database"
+            >
+              <Image
+                src="/neo4j-logo.png"
+                alt="Neo4j"
+                width={60}
+                height={24}
+                className="object-contain"
+              />
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Footer - collapse button */}
       <div className="hidden lg:block border-t border-[var(--stroke-1)] p-2">
         <button
           onClick={toggleSidebar}
