@@ -6,6 +6,11 @@ frontend:
         - corepack enable
         - corepack prepare pnpm@latest --activate
         - pnpm install
+        - echo "GRAPHRAG_API_URL=$GRAPHRAG_API_URL" >> .env.production
+        - echo "QDRANT_URL=$QDRANT_URL" >> .env.production
+        - echo "QDRANT_API_KEY=$QDRANT_API_KEY" >> .env.production
+        - echo "QDRANT_COLLECTION_NAME=$QDRANT_COLLECTION_NAME" >> .env.production
+        - echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production
     build:
       commands:
         - pnpm run build
