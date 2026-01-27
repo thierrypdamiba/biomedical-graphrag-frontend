@@ -6,11 +6,9 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   MessageSquare,
-  Database,
-  Settings,
+  Rocket,
   ChevronLeft,
   ChevronRight,
-  Network,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,9 +16,7 @@ import { useAppStore } from "@/store/app-store";
 
 const navItems = [
   { name: "Assistant", href: "/assistant", icon: MessageSquare },
-  { name: "Data", href: "/data", icon: Database },
-  { name: "Knowledge Graph", href: "/graph", icon: Network },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Get Started", href: "/get-started", icon: Rocket },
 ];
 
 export function Sidebar() {
