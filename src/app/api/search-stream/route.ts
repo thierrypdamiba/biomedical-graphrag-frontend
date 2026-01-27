@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-const GRAPHRAG_API_URL = process.env.GRAPHRAG_API_URL || "https://ihdx3ugyrv.us-east-1.awsapprunner.com";
+const GRAPHRAG_API_URL = process.env.GRAPHRAG_API_URL || "https://biomedical-graphrag-9qqm.onrender.com";
 
 interface SearchRequest {
   query: string;

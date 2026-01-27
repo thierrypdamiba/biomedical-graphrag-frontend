@@ -5,7 +5,6 @@ import {
   Send,
   Paperclip,
   FileText,
-  Clock,
   Database,
   Zap,
   Code,
@@ -31,13 +30,12 @@ import { DetailedTracePanel } from "@/components/ui/detailed-trace-panel";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { FormattedResponse } from "@/components/ui/formatted-response";
 import { useAppStore } from "@/store/app-store";
-import { cn, formatLatency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 interface TraceStep {
   name: string;
-  startTime: number;
-  duration?: number;
-  details?: Record<string, unknown>;
+  result_count?: number | null;
+  results?: unknown;
 }
 
 interface SearchResult {
@@ -58,18 +56,10 @@ interface SearchResult {
 
 interface MessageMetadata {
   collection: string;
-  filter?: string;
   vectorMode: "dense" | "sparse" | "hybrid";
-  latency: number;
   results: SearchResult[];
   trace?: TraceStep[];
   query?: string;
-  qdrant_results?: Record<string, unknown[]>;
-  neo4j_results?: Record<string, unknown>;
-  toolsUsed?: {
-    qdrant?: string;
-    neo4j?: string[];
-  };
 }
 
 interface Message {
@@ -170,7 +160,6 @@ export default function AssistantPage() {
         query,
         results: [],
         trace: [],
-        latency: 0,
       };
 
       while (true) {
@@ -196,10 +185,6 @@ export default function AssistantPage() {
                     ...metadata,
                     results: data.results || [],
                     trace: data.trace || [],
-                    latency: data.metadata?.totalLatency || 0,
-                    qdrant_results: data.metadata?.qdrant_results,
-                    neo4j_results: data.metadata?.neo4j_results,
-                    toolsUsed: data.metadata?.toolsUsed,
                   };
                   setStreamingMetadata(metadata);
                   break;
@@ -331,8 +316,7 @@ export default function AssistantPage() {
                     {message.metadata.vectorMode}
                   </Chip>
                   <Chip variant="teal">
-                    <Clock className="h-3 w-3" />
-                    {formatLatency(message.metadata.latency || 0)}
+                    {message.metadata.trace?.length || 0} tools
                   </Chip>
                   <div className="flex-1" />
                   <Button
@@ -495,11 +479,12 @@ export default function AssistantPage() {
                     </div>
                   </div>
                   {lastAssistantMessage.metadata.results.map((result) => {
+                    const r = result as unknown as Record<string, unknown>;
                     const paper = result.payload?.paper;
-                    const pmid = paper?.pmid || String(result.id);
-                    const title = paper?.title || "Untitled";
-                    const authors = paper?.authors?.slice(0, 2).map((a: { name?: string }) => a.name).join(", ");
-                    const journal = paper?.journal;
+                    const pmid = String(paper?.pmid || r.pmid || result.id || "");
+                    const title = String(paper?.title || r.title || "Untitled");
+                    const authors = (paper?.authors || r.authors as Array<{ name?: string }> | undefined)?.slice(0, 2).map((a) => a.name).join(", ");
+                    const journal = String(paper?.journal || r.journal || "");
 
                     return (
                       <div
@@ -797,24 +782,6 @@ const results = await client.query('${lastAssistantMessage.metadata?.collection 
             <TabsContent value="trace" className="flex-1 overflow-y-auto p-4">
               <DetailedTracePanel
                 trace={lastAssistantMessage?.metadata?.trace || []}
-                qdrantResults={lastAssistantMessage?.metadata?.qdrant_results as Record<string, Array<{
-                  id: number | string;
-                  score?: number;
-                  payload?: {
-                    paper?: {
-                      pmid?: string;
-                      title?: string;
-                      abstract?: string;
-                      authors?: Array<{ name?: string }>;
-                      journal?: string;
-                      publication_date?: string;
-                      mesh_terms?: Array<{ term?: string }>;
-                    };
-                  };
-                }>>}
-                neo4jResults={lastAssistantMessage?.metadata?.neo4j_results as Record<string, unknown>}
-                totalLatency={lastAssistantMessage?.metadata?.latency}
-                toolsUsed={lastAssistantMessage?.metadata?.toolsUsed}
               />
             </TabsContent>
           </Tabs>
@@ -837,13 +804,8 @@ const results = await client.query('${lastAssistantMessage.metadata?.collection 
           className="flex h-10 md:h-11 w-full items-center justify-between px-3 md:px-4 hover:bg-[var(--bg-2)]"
         >
           <div className="flex items-center gap-2 md:gap-4 text-xs md:text-sm overflow-x-auto">
-            <span className="text-[var(--text-secondary)] hidden sm:inline">Total latency:</span>
+            <span className="text-[var(--text-secondary)] hidden sm:inline">Tools:</span>
             <Chip variant="teal" className="text-xs">
-              {lastAssistantMessage?.metadata?.latency || 0}ms
-            </Chip>
-            <span className="text-[var(--text-secondary)] hidden sm:inline">Steps:</span>
-            <span className="text-[var(--text-secondary)] sm:hidden">S:</span>
-            <Chip variant="default" className="text-xs">
               {lastAssistantMessage?.metadata?.trace?.length || 0}
             </Chip>
             <span className="text-[var(--text-secondary)] hidden sm:inline">Results:</span>
@@ -863,11 +825,9 @@ const results = await client.query('${lastAssistantMessage.metadata?.collection 
             {lastAssistantMessage?.metadata?.trace && lastAssistantMessage.metadata.trace.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2">
-                  <h3 className="mb-2 md:mb-3 text-sm font-semibold">Timeline</h3>
+                  <h3 className="mb-2 md:mb-3 text-sm font-semibold">Tool Executions</h3>
                   <div className="space-y-2">
                     {lastAssistantMessage.metadata.trace.map((step, i) => {
-                      const totalLatency = lastAssistantMessage.metadata?.latency || 1;
-                      const widthPercent = Math.max(5, ((step.duration || 0) / totalLatency) * 100);
                       const colors = [
                         "bg-[var(--blue)]",
                         "bg-[var(--violet)]",
@@ -883,19 +843,15 @@ const results = await client.query('${lastAssistantMessage.metadata?.collection 
                           )}
                           onClick={() => setSelectedTraceStep(selectedTraceStep?.name === step.name ? null : step)}
                         >
-                          <span className="w-36 text-xs text-[var(--text-secondary)] truncate">
+                          <div className={cn("w-2 h-2 rounded-full shrink-0", colors[i % colors.length])} />
+                          <span className="text-xs text-[var(--text-secondary)] truncate flex-1">
                             {step.name}
                           </span>
-                          <div className="flex-1 h-5 rounded bg-[var(--bg-2)] relative">
-                            <div
-                              className={cn("h-full rounded flex items-center justify-end pr-2", colors[i % colors.length])}
-                              style={{ width: `${widthPercent}%` }}
-                            >
-                              <span className="text-[10px] text-white font-medium">
-                                {step.duration}ms
-                              </span>
-                            </div>
-                          </div>
+                          {step.result_count != null && (
+                            <Chip variant="default" className="text-[10px]">
+                              {step.result_count} results
+                            </Chip>
+                          )}
                         </div>
                       );
                     })}
@@ -903,27 +859,25 @@ const results = await client.query('${lastAssistantMessage.metadata?.collection 
                 </div>
                 <div>
                   <h3 className="mb-3 text-sm font-semibold">
-                    {selectedTraceStep ? "Step Details" : "Raw Events"}
+                    {selectedTraceStep ? "Tool Results" : "Summary"}
                   </h3>
                   {selectedTraceStep ? (
                     <div className="space-y-3">
                       <div>
-                        <span className="text-xs text-[var(--text-tertiary)]">Name</span>
+                        <span className="text-xs text-[var(--text-tertiary)]">Tool</span>
                         <p className="text-sm font-medium">{selectedTraceStep.name}</p>
                       </div>
-                      <div>
-                        <span className="text-xs text-[var(--text-tertiary)]">Duration</span>
-                        <p className="text-sm">{selectedTraceStep.duration}ms</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-[var(--text-tertiary)]">Start Time</span>
-                        <p className="text-sm">{selectedTraceStep.startTime}ms</p>
-                      </div>
-                      {selectedTraceStep.details && (
+                      {selectedTraceStep.result_count != null && (
                         <div>
-                          <span className="text-xs text-[var(--text-tertiary)]">Details</span>
+                          <span className="text-xs text-[var(--text-tertiary)]">Results</span>
+                          <p className="text-sm">{selectedTraceStep.result_count}</p>
+                        </div>
+                      )}
+                      {selectedTraceStep.results != null && (
+                        <div>
+                          <span className="text-xs text-[var(--text-tertiary)]">Data</span>
                           <pre className="mt-1 rounded bg-[#0B1220] p-2 text-[10px] overflow-x-auto max-h-32">
-                            {JSON.stringify(selectedTraceStep.details, null, 2)}
+                            {JSON.stringify(selectedTraceStep.results, null, 2).slice(0, 2000)}
                           </pre>
                         </div>
                       )}
@@ -932,7 +886,7 @@ const results = await client.query('${lastAssistantMessage.metadata?.collection 
                     <div className="space-y-1 text-xs font-mono text-[var(--text-secondary)]">
                       {lastAssistantMessage.metadata.trace.map((step, i) => (
                         <div key={i}>
-                          {String(step.startTime).padStart(5, "0")}ms {step.name.toLowerCase().replace(/\s+/g, "_")}
+                          {step.name} {step.result_count != null ? `→ ${step.result_count}` : ""}
                         </div>
                       ))}
                     </div>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 // GraphRAG API endpoint (Python FastAPI server)
-const GRAPHRAG_API_URL = process.env.GRAPHRAG_API_URL || "https://ihdx3ugyrv.us-east-1.awsapprunner.com";
+const GRAPHRAG_API_URL = process.env.GRAPHRAG_API_URL || "https://biomedical-graphrag-9qqm.onrender.com";
 
 // Fallback to direct Qdrant if GraphRAG is not available
 const QDRANT_URL = process.env.QDRANT_URL;
