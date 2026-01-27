@@ -163,7 +163,7 @@ export default function AssistantPage() {
                     : data.results || [];
                   metadata = {
                     ...metadata,
-                    results: richResults,
+                    results: richResults.slice(0, topK),
                     trace,
                   };
                   // metadata updated for final message
