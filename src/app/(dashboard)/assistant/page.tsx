@@ -1,16 +1,13 @@
 "use client";
 
 import * as React from "react";
-import {
-  Send,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-} from "lucide-react";
+import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DetailedTracePanel } from "@/components/ui/detailed-trace-panel";
+import Image from "next/image";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { FormattedResponse } from "@/components/ui/formatted-response";
 import { useAppStore } from "@/store/app-store";
@@ -25,17 +22,12 @@ interface TraceStep {
 interface SearchResult {
   id: string;
   score: number;
-  payload: {
-    paper?: {
-      pmid?: string;
-      title?: string;
-      abstract?: string;
-      authors?: Array<{ name?: string }>;
-      journal?: string;
-      publication_date?: string;
-      mesh_terms?: Array<{ term?: string }>;
-    };
-  };
+  title?: string;
+  abstract?: string;
+  authors?: string[];
+  journal?: string;
+  year?: string;
+  pmid?: string;
 }
 
 interface MessageMetadata {
@@ -59,9 +51,8 @@ export default function AssistantPage() {
     toggleArtifactsPane,
     activeArtifactTab,
     setActiveArtifactTab,
-    traceDrawerOpen,
-    toggleTraceDrawer,
-    sidebarCollapsed,
+    topK,
+    setTopK,
   } = useAppStore();
 
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -70,8 +61,7 @@ export default function AssistantPage() {
   const [streamingContent, setStreamingContent] = React.useState("");
   const [currentStage, setCurrentStage] = React.useState<string | undefined>();
   const [stageMessage, setStageMessage] = React.useState<string | undefined>();
-  const [selectedTraceStep, setSelectedTraceStep] = React.useState<TraceStep | null>(null);
-  const [streamingMetadata, setStreamingMetadata] = React.useState<Partial<MessageMetadata> | null>(null);
+
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -95,7 +85,7 @@ export default function AssistantPage() {
     setStreamingContent("");
     setCurrentStage(undefined);
     setStageMessage(undefined);
-    setStreamingMetadata(null);
+    // reset streaming state
 
     try {
       const response = await fetch("/api/search-stream", {
@@ -103,7 +93,7 @@ export default function AssistantPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query,
-          limit: 5,
+          limit: topK,
           mode: "graphrag",
         }),
       });
@@ -145,14 +135,40 @@ export default function AssistantPage() {
                   setStageMessage(data.message);
                   break;
 
-                case "metadata":
+                case "metadata": {
+                  const trace = data.trace || [];
+                  // Extract rich results from the first trace step (Qdrant search)
+                  // since the top-level results lack payload data
+                  const qdrantTrace = trace.find((t: { name: string }) =>
+                    t.name?.includes("retrieve") || t.name?.includes("search")
+                  );
+                  const traceResults = qdrantTrace?.results;
+                  const richResults = Array.isArray(traceResults)
+                    ? traceResults.map((r: Record<string, unknown>) => {
+                        const payload = r.payload as Record<string, unknown> | undefined;
+                        const paper = (payload?.paper || payload || {}) as Record<string, unknown>;
+                        return {
+                          id: String(r.id || ""),
+                          score: Number(r.score || 0),
+                          title: String(paper.title || "Untitled"),
+                          abstract: String(paper.abstract || ""),
+                          authors: Array.isArray(paper.authors)
+                            ? paper.authors.map((a: unknown) => typeof a === "object" && a !== null ? (a as Record<string, string>).name || "" : String(a))
+                            : [],
+                          journal: String(paper.journal || ""),
+                          year: String(paper.publication_date || paper.year || ""),
+                          pmid: String(paper.pmid || ""),
+                        };
+                      })
+                    : data.results || [];
                   metadata = {
                     ...metadata,
-                    results: data.results || [],
-                    trace: data.trace || [],
+                    results: richResults,
+                    trace,
                   };
-                  setStreamingMetadata(metadata);
+                  // metadata updated for final message
                   break;
+                }
 
                 case "content":
                   accumulatedContent += data.text;
@@ -172,7 +188,7 @@ export default function AssistantPage() {
                   setStreamingContent("");
                   setCurrentStage(undefined);
                   setStageMessage(undefined);
-                  setStreamingMetadata(null);
+                  // reset streaming state
                   break;
 
                 case "error":
@@ -196,7 +212,7 @@ export default function AssistantPage() {
       setStreamingContent("");
       setCurrentStage(undefined);
       setStageMessage(undefined);
-      setStreamingMetadata(null);
+      // reset streaming state
     } finally {
       setIsLoading(false);
     }
@@ -225,26 +241,28 @@ export default function AssistantPage() {
               GraphRAG search over biomedical literature
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
+          {!artifactsPaneOpen && (
+            <button
               onClick={toggleArtifactsPane}
-              className="gap-2 text-xs md:text-sm"
+              className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all border bg-[var(--bg-2)] border-[var(--stroke-1)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--stroke-2)]"
             >
-              <span className="hidden sm:inline">{artifactsPaneOpen ? "Hide" : "Show"} Artifacts</span>
-              <span className="sm:hidden">{artifactsPaneOpen ? "Hide" : "Show"}</span>
-              {artifactsPaneOpen ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
+              Show Results & Trace
+            </button>
+          )}
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+          {messages.length === 0 && !isLoading && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <h2 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-2">
+                Biomedical GraphRAG
+              </h2>
+              <p className="text-sm text-[var(--text-secondary)] max-w-md">
+                Ask biomedical research questions and get AI-generated answers grounded in PubMed literature and knowledge graphs.
+              </p>
+            </div>
+          )}
           {messages.map((message) => (
             <div
               key={message.id}
@@ -327,12 +345,36 @@ export default function AssistantPage() {
                 >
                   <Send className="h-4 w-4" />
                 </Button>
+                <div className="flex items-center gap-1 border-l border-[var(--stroke-1)] pl-2">
+                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase">K</span>
+                  {[1, 3, 5].map((k) => (
+                    <button
+                      key={k}
+                      onClick={() => setTopK(k)}
+                      className={cn(
+                        "w-6 h-6 rounded text-xs font-medium transition-all",
+                        topK === k
+                          ? "bg-[var(--violet)]/20 text-[var(--violet)]"
+                          : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                      )}
+                    >
+                      {k}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-          <div className="mt-2 hidden md:flex items-center gap-4 text-xs text-[var(--text-tertiary)]">
-            <span>Enter to send, Shift+Enter for new line</span>
-            <span>⌘/ to toggle trace</span>
+          <div className="mt-2 flex items-center justify-center text-xs text-[var(--text-tertiary)]">
+            <div className="flex items-center gap-4">
+              <span className="text-[10px] uppercase tracking-wider">Powered by</span>
+              <a href="https://qdrant.tech" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-[80px] h-[28px] rounded bg-white hover:bg-gray-100 transition-all">
+                <Image src="/qdrant-wordmark-dark.png" alt="Qdrant" width={64} height={18} className="object-contain" />
+              </a>
+              <a href="https://neo4j.com" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-[80px] h-[28px] rounded bg-white hover:bg-gray-100 transition-all">
+                <Image src="/neo4j-logo.png" alt="Neo4j" width={64} height={18} className="object-contain" />
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -345,40 +387,33 @@ export default function AssistantPage() {
             onValueChange={(v) => setActiveArtifactTab(v as typeof activeArtifactTab)}
             className="h-full flex flex-col"
           >
-            <TabsList className="px-4 pt-4">
-              <TabsTrigger value="results">Results</TabsTrigger>
-              <TabsTrigger value="trace">Trace</TabsTrigger>
-            </TabsList>
+            <div className="flex items-center justify-between px-4 pt-4">
+              <TabsList>
+                <TabsTrigger value="results">Results</TabsTrigger>
+                <TabsTrigger value="trace">Trace</TabsTrigger>
+              </TabsList>
+              <button
+                onClick={toggleArtifactsPane}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-2)] transition-all"
+              >
+                Hide
+              </button>
+            </div>
 
             <TabsContent value="results" className="flex-1 overflow-y-auto p-4">
               {lastAssistantMessage?.metadata?.results && lastAssistantMessage.metadata.results.length > 0 ? (
                 <div className="space-y-2">
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-4">
                     <span className="text-sm text-[var(--text-secondary)]">
                       {lastAssistantMessage.metadata.results.length} results
                     </span>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(
-                            JSON.stringify(lastAssistantMessage.metadata?.results, null, 2)
-                          );
-                        }}
-                      >
-                        <Copy className="h-4 w-4 mr-1" />
-                        Export JSON
-                      </Button>
-                    </div>
                   </div>
                   {lastAssistantMessage.metadata.results.map((result) => {
-                    const r = result as unknown as Record<string, unknown>;
-                    const paper = result.payload?.paper;
-                    const pmid = String(paper?.pmid || r.pmid || result.id || "");
-                    const title = String(paper?.title || r.title || "Untitled");
-                    const authors = (paper?.authors || r.authors as Array<{ name?: string }> | undefined)?.slice(0, 2).map((a) => a.name).join(", ");
-                    const journal = String(paper?.journal || r.journal || "");
+                    const pmid = result.pmid || result.id || "";
+                    const title = result.title || "Untitled";
+                    const authors = result.authors?.slice(0, 3).join(", ");
+                    const journal = result.journal || "";
+                    const year = result.year || "";
 
                     return (
                       <div
@@ -386,9 +421,18 @@ export default function AssistantPage() {
                         className="rounded-lg border border-[var(--stroke-1)] p-3 hover:bg-[var(--bg-2)] transition-colors"
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <code className="text-xs text-[var(--text-tertiary)]">
-                            PMID:{pmid}
-                          </code>
+                          {pmid ? (
+                            <a
+                              href={`https://pubmed.ncbi.nlm.nih.gov/${pmid}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-[var(--blue)] hover:underline"
+                            >
+                              PMID: {pmid}
+                            </a>
+                          ) : (
+                            <code className="text-xs text-[var(--text-tertiary)]">{result.id}</code>
+                          )}
                           <Chip variant="blue">{result.score.toFixed(3)}</Chip>
                         </div>
                         <p className="text-sm font-medium line-clamp-2">{title}</p>
@@ -397,9 +441,9 @@ export default function AssistantPage() {
                             {authors}
                           </p>
                         )}
-                        {journal && (
+                        {(journal || year) && (
                           <p className="text-xs text-[var(--text-tertiary)]">
-                            {journal}
+                            {[journal, year].filter(Boolean).join(" · ")}
                           </p>
                         )}
                       </div>
@@ -422,119 +466,6 @@ export default function AssistantPage() {
         </div>
       )}
 
-      {/* Bottom Trace Drawer */}
-      <div
-        className={cn(
-          "fixed bottom-0 right-0 border-t border-[var(--stroke-1)] bg-[var(--bg-1)] transition-all duration-300",
-          traceDrawerOpen ? "h-[280px] md:h-[360px]" : "h-10 md:h-11",
-          // Mobile: full width
-          "left-0",
-          // Desktop: account for sidebar
-          sidebarCollapsed ? "lg:left-[72px]" : "lg:left-[260px]"
-        )}
-      >
-        <button
-          onClick={toggleTraceDrawer}
-          className="flex h-10 md:h-11 w-full items-center justify-between px-3 md:px-4 hover:bg-[var(--bg-2)]"
-        >
-          <div className="flex items-center gap-2 md:gap-4 text-xs md:text-sm overflow-x-auto">
-            <span className="text-[var(--text-secondary)] hidden sm:inline">Tools:</span>
-            <Chip variant="teal" className="text-xs">
-              {lastAssistantMessage?.metadata?.trace?.length || 0}
-            </Chip>
-            <span className="text-[var(--text-secondary)] hidden sm:inline">Results:</span>
-            <span className="text-[var(--text-secondary)] sm:hidden">R:</span>
-            <Chip variant="default" className="text-xs">
-              {lastAssistantMessage?.metadata?.results?.length || 0}
-            </Chip>
-          </div>
-          {traceDrawerOpen ? (
-            <ChevronDown className="h-4 w-4 shrink-0" />
-          ) : (
-            <ChevronUp className="h-4 w-4 shrink-0" />
-          )}
-        </button>
-        {traceDrawerOpen && (
-          <div className="h-[calc(280px-40px)] md:h-[calc(360px-44px)] overflow-y-auto p-3 md:p-4">
-            {lastAssistantMessage?.metadata?.trace && lastAssistantMessage.metadata.trace.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
-                  <h3 className="mb-2 md:mb-3 text-sm font-semibold">Tool Executions</h3>
-                  <div className="space-y-2">
-                    {lastAssistantMessage.metadata.trace.map((step, i) => {
-                      const colors = [
-                        "bg-[var(--blue)]",
-                        "bg-[var(--violet)]",
-                        "bg-[var(--teal)]",
-                        "bg-[var(--amaranth)]",
-                      ];
-                      return (
-                        <div
-                          key={i}
-                          className={cn(
-                            "flex items-center gap-2 cursor-pointer rounded p-1 -m-1 transition-colors hover:bg-[var(--bg-2)]",
-                            selectedTraceStep?.name === step.name && "bg-[var(--selection)]"
-                          )}
-                          onClick={() => setSelectedTraceStep(selectedTraceStep?.name === step.name ? null : step)}
-                        >
-                          <div className={cn("w-2 h-2 rounded-full shrink-0", colors[i % colors.length])} />
-                          <span className="text-xs text-[var(--text-secondary)] truncate flex-1">
-                            {step.name}
-                          </span>
-                          {step.result_count != null && (
-                            <Chip variant="default" className="text-[10px]">
-                              {step.result_count} results
-                            </Chip>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold">
-                    {selectedTraceStep ? "Tool Results" : "Summary"}
-                  </h3>
-                  {selectedTraceStep ? (
-                    <div className="space-y-3">
-                      <div>
-                        <span className="text-xs text-[var(--text-tertiary)]">Tool</span>
-                        <p className="text-sm font-medium">{selectedTraceStep.name}</p>
-                      </div>
-                      {selectedTraceStep.result_count != null && (
-                        <div>
-                          <span className="text-xs text-[var(--text-tertiary)]">Results</span>
-                          <p className="text-sm">{selectedTraceStep.result_count}</p>
-                        </div>
-                      )}
-                      {selectedTraceStep.results != null && (
-                        <div>
-                          <span className="text-xs text-[var(--text-tertiary)]">Data</span>
-                          <pre className="mt-1 rounded bg-[#0B1220] p-2 text-[10px] overflow-x-auto max-h-32">
-                            {JSON.stringify(selectedTraceStep.results, null, 2).slice(0, 2000)}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-1 text-xs font-mono text-[var(--text-secondary)]">
-                      {lastAssistantMessage.metadata.trace.map((step, i) => (
-                        <div key={i}>
-                          {step.name} {step.result_count != null ? `→ ${step.result_count}` : ""}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center text-[var(--text-tertiary)]">
-                No trace data. Run a search to see the execution timeline.
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
