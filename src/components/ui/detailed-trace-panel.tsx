@@ -6,12 +6,9 @@ import {
   ChevronRight,
   Cpu,
   FileText,
-  Copy,
-  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Chip } from "@/components/ui/chip";
-import { Button } from "@/components/ui/button";
 
 interface TraceStep {
   name: string;
@@ -25,8 +22,6 @@ interface DetailedTracePanelProps {
 
 export function DetailedTracePanel({ trace }: DetailedTracePanelProps) {
   const [expandedSteps, setExpandedSteps] = React.useState<Set<number>>(new Set());
-  const [copiedId, setCopiedId] = React.useState<string | null>(null);
-
   const toggleStep = (index: number) => {
     setExpandedSteps((prev) => {
       const next = new Set(prev);
@@ -37,12 +32,6 @@ export function DetailedTracePanel({ trace }: DetailedTracePanelProps) {
       }
       return next;
     });
-  };
-
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
   };
 
   if (trace.length === 0) {
@@ -65,15 +54,6 @@ export function DetailedTracePanel({ trace }: DetailedTracePanelProps) {
           {trace.length} tool{trace.length !== 1 ? "s" : ""} executed
         </span>
         <div className="flex-1" />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 text-xs"
-          onClick={() => copyToClipboard(JSON.stringify(trace, null, 2), "all")}
-        >
-          {copiedId === "all" ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          <span className="ml-1">Copy all</span>
-        </Button>
       </div>
 
       {/* Tool steps */}
@@ -101,19 +81,9 @@ export function DetailedTracePanel({ trace }: DetailedTracePanelProps) {
           </button>
           {expandedSteps.has(i) && step.results != null && (
             <div className="p-3 border-t border-[var(--stroke-1)]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-[var(--text-tertiary)] flex items-center gap-1">
-                  <FileText className="h-3 w-3" />
-                  Tool output
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={() => copyToClipboard(JSON.stringify(step.results, null, 2), `step-${i}`)}
-                >
-                  {copiedId === `step-${i}` ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                </Button>
+              <div className="flex items-center gap-1 mb-2">
+                <FileText className="h-3 w-3 text-[var(--text-tertiary)]" />
+                <span className="text-xs text-[var(--text-tertiary)]">Tool output</span>
               </div>
               <pre className="rounded bg-[#0B1220] p-2 text-[10px] overflow-x-auto max-h-[300px] overflow-y-auto">
                 {JSON.stringify(step.results, null, 2).slice(0, 5000)}
