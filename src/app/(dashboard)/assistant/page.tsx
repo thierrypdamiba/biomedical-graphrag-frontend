@@ -161,10 +161,18 @@ export default function AssistantPage() {
                         };
                       })
                     : data.results || [];
+                  const slicedResults = richResults.slice(0, topK);
+                  // Patch trace so Qdrant step reflects topK
+                  const patchedTrace = trace.map((t: Record<string, unknown>) => {
+                    if (t === qdrantTrace) {
+                      return { ...t, result_count: slicedResults.length, results: (traceResults as unknown[]).slice(0, topK) };
+                    }
+                    return t;
+                  });
                   metadata = {
                     ...metadata,
-                    results: richResults.slice(0, topK),
-                    trace,
+                    results: slicedResults,
+                    trace: patchedTrace,
                   };
                   // metadata updated for final message
                   break;
