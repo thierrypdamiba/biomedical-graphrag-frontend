@@ -11,6 +11,12 @@ export const metadata: Metadata = {
     title: "Biomedical GraphRAG",
     description: "AI-powered biomedical research assistant combining Qdrant vector search with Neo4j knowledge graphs",
     type: "website",
+    siteName: "Biomedical GraphRAG",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Biomedical GraphRAG",
+    description: "AI-powered biomedical research assistant combining Qdrant vector search with Neo4j knowledge graphs",
   },
 };
 
