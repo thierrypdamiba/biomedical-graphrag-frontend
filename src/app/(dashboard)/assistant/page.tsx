@@ -154,7 +154,14 @@ export default function AssistantPage() {
                           title: String(paper.title || "Untitled"),
                           abstract: String(paper.abstract || ""),
                           authors: Array.isArray(paper.authors)
-                            ? paper.authors.map((a: unknown) => typeof a === "object" && a !== null ? (a as Record<string, string>).name || "" : String(a))
+                            ? paper.authors.map((a: unknown) => {
+                                if (typeof a === "string") return a;
+                                if (typeof a === "object" && a !== null) {
+                                  const obj = a as Record<string, unknown>;
+                                  return String(obj.name || obj.full_name || obj.label || JSON.stringify(a));
+                                }
+                                return String(a);
+                              }).filter(Boolean)
                             : [],
                           journal: String(paper.journal || ""),
                           year: String(paper.publication_date || paper.year || ""),

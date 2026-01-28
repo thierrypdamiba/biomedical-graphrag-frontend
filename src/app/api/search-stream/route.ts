@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query, limit, mode }),
+          signal: AbortSignal.timeout(120_000),
         });
 
         // Cancel any remaining timers
