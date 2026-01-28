@@ -22,13 +22,12 @@ export async function POST(request: NextRequest) {
         };
 
         // Send initial status
-        send({ type: "status", stage: "search", message: "Searching vector database..." });
+        send({ type: "status", stage: "search", message: "Running vector search..." });
 
         // Start the backend request and progress timer concurrently
         const stages = [
-          { delay: 3000, stage: "graph", message: "Querying knowledge graph..." },
-          { delay: 7000, stage: "tools", message: "Running graph enrichment tools..." },
-          { delay: 12000, stage: "generate", message: "Generating AI summary..." },
+          { delay: 4000, stage: "tools", message: "Running graph enrichment tools..." },
+          { delay: 10000, stage: "generate", message: "Generating AI summary..." },
         ];
 
         let cancelled = false;
@@ -39,7 +38,7 @@ export async function POST(request: NextRequest) {
         );
 
         // Make request to backend (this is the long blocking call)
-        const response = await fetch(`${GRAPHRAG_API_URL}/api/search`, {
+        const response = await fetch(`${GRAPHRAG_API_URL}/api/graphrag-query`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query, limit, mode }),

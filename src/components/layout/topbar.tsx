@@ -13,8 +13,8 @@ export function TopBar() {
         <Image src="/qdrant-wordmark-light.png" alt="Qdrant" width={100} height={28} className="object-contain" />
         <div className="w-px h-5 bg-[var(--stroke-1)]" />
         <span className="font-semibold text-[var(--text-primary)] text-sm md:text-base truncate">
-          <span className="hidden sm:inline">Biomedical GraphRAG</span>
-          <span className="sm:hidden">BioMed GraphRAG</span>
+          <span className="hidden sm:inline">PubMed Navigator</span>
+          <span className="sm:hidden">PubMed Nav</span>
         </span>
       </div>
 

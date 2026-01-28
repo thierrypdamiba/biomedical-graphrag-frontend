@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 interface TraceStep {
   name: string;
+  arguments?: Record<string, unknown> | null;
   result_count?: number | null;
   results?: unknown;
 }
@@ -244,7 +245,7 @@ export default function AssistantPage() {
         {/* Header */}
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="min-w-0">
-            <h1 className="text-lg md:text-xl font-semibold">Assistant</h1>
+            <h1 className="text-lg md:text-xl font-semibold">Biomedical CoPilot</h1>
             <p className="text-xs md:text-sm text-[var(--text-secondary)] truncate">
               GraphRAG search over biomedical literature
             </p>
@@ -264,7 +265,7 @@ export default function AssistantPage() {
           {messages.length === 0 && !isLoading && (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <h2 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-2">
-                Biomedical GraphRAG
+                PubMed Navigator
               </h2>
               <p className="text-sm text-[var(--text-secondary)] max-w-md">
                 Ask biomedical research questions and get AI-generated answers grounded in PubMed literature and knowledge graphs.
@@ -283,7 +284,7 @@ export default function AssistantPage() {
             >
               <div className="mb-1 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
                 <span className="font-medium">
-                  {message.role === "user" ? "You" : "Assistant"}
+                  {message.role === "user" ? "You" : "Biomedical CoPilot"}
                 </span>
                 <span>•</span>
                 <span>{message.timestamp.toLocaleTimeString()}</span>
@@ -301,7 +302,7 @@ export default function AssistantPage() {
                     {message.metadata.trace?.length || 0} tools executed
                   </Chip>
                   <Chip variant="default">
-                    {message.metadata.results?.length || 0} results
+                    {message.metadata.results?.length || 0} Matches
                   </Chip>
                 </div>
               )}
@@ -313,7 +314,7 @@ export default function AssistantPage() {
           {streamingContent && (
             <div className="rounded-lg bg-[var(--bg-1)] p-4 animate-fade-in">
               <div className="mb-1 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-                <span className="font-medium">Assistant</span>
+                <span className="font-medium">Biomedical CoPilot</span>
                 <span>•</span>
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--emerald)]" />
@@ -354,7 +355,7 @@ export default function AssistantPage() {
                   <Send className="h-4 w-4" />
                 </Button>
                 <div className="flex items-center gap-1 border-l border-[var(--stroke-1)] pl-2">
-                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase">K</span>
+                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase">Top K</span>
                   {[1, 3, 5].map((k) => (
                     <button
                       key={k}
@@ -397,7 +398,7 @@ export default function AssistantPage() {
           >
             <div className="flex items-center justify-between px-4 pt-4">
               <TabsList>
-                <TabsTrigger value="results">Results</TabsTrigger>
+                <TabsTrigger value="results">Vector Search Results</TabsTrigger>
                 <TabsTrigger value="trace">Trace</TabsTrigger>
               </TabsList>
               <button
@@ -413,7 +414,7 @@ export default function AssistantPage() {
                 <div className="space-y-2">
                   <div className="mb-4">
                     <span className="text-sm text-[var(--text-secondary)]">
-                      {lastAssistantMessage.metadata.results.length} results
+                      {lastAssistantMessage.metadata.results.length} Matches
                     </span>
                   </div>
                   {lastAssistantMessage.metadata.results.map((result) => {

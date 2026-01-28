@@ -12,6 +12,7 @@ import { Chip } from "@/components/ui/chip";
 
 interface TraceStep {
   name: string;
+  arguments?: Record<string, unknown> | null;
   result_count?: number | null;
   results?: unknown;
 }
@@ -75,20 +76,35 @@ export function DetailedTracePanel({ trace }: DetailedTracePanelProps) {
             <div className="flex-1" />
             {step.result_count != null && (
               <Chip variant="default" className="text-xs">
-                {step.result_count} results
+                {step.result_count} Matches
               </Chip>
             )}
           </button>
-          {expandedSteps.has(i) && step.results != null && (
+          {expandedSteps.has(i) && (step.arguments != null || step.results != null) && (
             <div className="p-3 border-t border-[var(--stroke-1)]">
-              <div className="flex items-center gap-1 mb-2">
-                <FileText className="h-3 w-3 text-[var(--text-tertiary)]" />
-                <span className="text-xs text-[var(--text-tertiary)]">Tool output</span>
-              </div>
-              <pre className="rounded bg-[#0B1220] p-2 text-[10px] overflow-x-auto max-h-[300px] overflow-y-auto">
-                {JSON.stringify(step.results, null, 2).slice(0, 5000)}
-                {JSON.stringify(step.results, null, 2).length > 5000 && "\n..."}
-              </pre>
+              {step.arguments != null && Object.keys(step.arguments).length > 0 && (
+                <>
+                  <div className="flex items-center gap-1 mb-2">
+                    <FileText className="h-3 w-3 text-[var(--text-tertiary)]" />
+                    <span className="text-xs text-[var(--text-tertiary)]">Tool arguments</span>
+                  </div>
+                  <pre className="rounded bg-[#0B1220] p-2 text-[10px] overflow-x-auto max-h-[150px] overflow-y-auto mb-3">
+                    {JSON.stringify(step.arguments, null, 2)}
+                  </pre>
+                </>
+              )}
+              {step.results != null && (
+                <>
+                  <div className="flex items-center gap-1 mb-2">
+                    <FileText className="h-3 w-3 text-[var(--text-tertiary)]" />
+                    <span className="text-xs text-[var(--text-tertiary)]">Tool output</span>
+                  </div>
+                  <pre className="rounded bg-[#0B1220] p-2 text-[10px] overflow-x-auto max-h-[300px] overflow-y-auto">
+                    {JSON.stringify(step.results, null, 2).slice(0, 5000)}
+                    {JSON.stringify(step.results, null, 2).length > 5000 && "\n..."}
+                  </pre>
+                </>
+              )}
             </div>
           )}
         </div>
