@@ -6,7 +6,6 @@ export type Theme = "light" | "dark" | "system";
 interface AppState {
   // Theme
   theme: Theme;
-  setTheme: (theme: Theme) => void;
 
   // Query settings
   topK: number;
@@ -24,7 +23,6 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       // Theme
       theme: "dark",
-      setTheme: (theme) => set({ theme }),
 
       // Query settings
       topK: 5,

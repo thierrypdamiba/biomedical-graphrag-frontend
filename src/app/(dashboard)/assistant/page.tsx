@@ -86,7 +86,7 @@ export default function AssistantPage() {
     setStreamingContent("");
     setCurrentStage(undefined);
     setStageMessage(undefined);
-    // reset streaming state
+
 
     try {
       const response = await fetch("/api/search-stream", {
@@ -204,7 +204,7 @@ export default function AssistantPage() {
                   setStreamingContent("");
                   setCurrentStage(undefined);
                   setStageMessage(undefined);
-                  // reset streaming state
+              
                   break;
 
                 case "error":
@@ -228,7 +228,7 @@ export default function AssistantPage() {
       setStreamingContent("");
       setCurrentStage(undefined);
       setStageMessage(undefined);
-      // reset streaming state
+  
     } finally {
       setIsLoading(false);
     }
