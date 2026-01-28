@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Search, GitBranch, Brain } from "lucide-react";
+import { Search, GitBranch, Wrench, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ThinkingStage {
@@ -13,8 +13,9 @@ interface ThinkingStage {
 
 const stages: ThinkingStage[] = [
   { id: "search", icon: Search, label: "Running vector search", color: "text-blue-400" },
-  { id: "tools", icon: GitBranch, label: "Running graph enrichment tools", color: "text-violet-400" },
-  { id: "generate", icon: Brain, label: "Generating AI summary", color: "text-emerald-400" },
+  { id: "graph", icon: GitBranch, label: "Enriching with graph", color: "text-violet-400" },
+  { id: "tools", icon: Wrench, label: "Processing results", color: "text-amber-400" },
+  { id: "generate", icon: Brain, label: "Generating response", color: "text-emerald-400" },
 ];
 
 interface ThinkingIndicatorProps {
