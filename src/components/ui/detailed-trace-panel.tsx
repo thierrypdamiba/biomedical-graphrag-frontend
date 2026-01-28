@@ -64,10 +64,14 @@ export function DetailedTracePanel({ trace }: DetailedTracePanelProps) {
             onClick={() => toggleStep(i)}
             className="flex items-center gap-2 w-full p-3 hover:bg-[var(--bg-2)] transition-colors"
           >
-            {expandedSteps.has(i) ? (
-              <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)]" />
+            {(step.arguments != null || step.results != null) ? (
+              expandedSteps.has(i) ? (
+                <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)]" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-[var(--text-tertiary)]" />
+              )
             ) : (
-              <ChevronRight className="h-4 w-4 text-[var(--text-tertiary)]" />
+              <div className="w-4 h-4" />
             )}
             <div className={cn("w-2 h-2 rounded-full shrink-0", bgColors[i % bgColors.length])} />
             <span className={cn("font-medium text-sm", colors[i % colors.length])}>
