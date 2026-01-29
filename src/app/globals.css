@@ -147,40 +147,10 @@ h4 {
   letter-spacing: -0.01em;
 }
 
-/* Body text styles */
-.text-body {
-  font-size: 1rem;
-  line-height: 1.6;
-  font-weight: 500;
-  letter-spacing: -0.011em;
-}
-
-.text-small {
-  font-size: 0.857rem; /* ~12px */
-  line-height: 1.5;
-  font-weight: 500;
-  letter-spacing: -0.006em;
-}
-
 .text-xs {
   font-size: 0.786rem; /* ~11px */
   line-height: 1.45;
   letter-spacing: 0;
-}
-
-.text-mono {
-  font-family: var(--font-mono);
-  font-size: 0.857rem;
-  line-height: 1.6;
-  letter-spacing: 0;
-}
-
-/* Labels and UI text */
-.text-label {
-  font-size: 0.786rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 /* Focus Ring - only for keyboard navigation */
@@ -252,20 +222,10 @@ pre {
   tab-size: 2;
 }
 
-/* Numeric text - tabular figures for alignment */
-.text-numeric {
-  font-feature-settings: 'tnum' on, 'lnum' on;
-}
-
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { transform: translateY(8px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
 }
 
 @keyframes pulse {
@@ -275,10 +235,6 @@ pre {
 
 .animate-fade-in {
   animation: fadeIn 0.2s ease-out;
-}
-
-.animate-slide-up {
-  animation: slideUp 0.2s ease-out;
 }
 
 .animate-pulse {

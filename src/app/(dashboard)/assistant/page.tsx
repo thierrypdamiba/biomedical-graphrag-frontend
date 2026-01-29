@@ -1,75 +1,41 @@
 "use client";
 
 import * as React from "react";
-import {
-  Send,
-  Paperclip,
-  FileText,
-  Clock,
-  Database,
-  Zap,
-  Code,
-  Pin,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  ExternalLink,
-} from "lucide-react";
+import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DetailedTracePanel } from "@/components/ui/detailed-trace-panel";
+import Image from "next/image";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { FormattedResponse } from "@/components/ui/formatted-response";
 import { useAppStore } from "@/store/app-store";
-import { cn, formatLatency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 interface TraceStep {
   name: string;
-  startTime: number;
-  duration?: number;
-  details?: Record<string, unknown>;
+  arguments?: Record<string, unknown> | null;
+  result_count?: number | null;
+  results?: unknown;
 }
 
 interface SearchResult {
   id: string;
   score: number;
-  payload: {
-    paper?: {
-      pmid?: string;
-      title?: string;
-      abstract?: string;
-      authors?: Array<{ name?: string }>;
-      journal?: string;
-      publication_date?: string;
-      mesh_terms?: Array<{ term?: string }>;
-    };
-  };
+  title?: string;
+  abstract?: string;
+  authors?: string[];
+  journal?: string;
+  year?: string;
+  pmid?: string;
 }
 
 interface MessageMetadata {
   collection: string;
-  filter?: string;
-  vectorMode: "dense" | "sparse" | "hybrid";
-  latency: number;
   results: SearchResult[];
   trace?: TraceStep[];
   query?: string;
-  qdrant_results?: Record<string, unknown[]>;
-  neo4j_results?: Record<string, unknown>;
-  toolsUsed?: {
-    qdrant?: string;
-    neo4j?: string[];
-  };
 }
 
 interface Message {
@@ -82,22 +48,12 @@ interface Message {
 
 export default function AssistantPage() {
   const {
-    vectorMode,
-    setVectorMode,
-    topK,
-    setTopK,
-    activeCollection,
     artifactsPaneOpen,
     toggleArtifactsPane,
     activeArtifactTab,
     setActiveArtifactTab,
-    traceDrawerOpen,
-    toggleTraceDrawer,
-    selectedPoint,
-    setSelectedPoint,
-    sidebarCollapsed,
-    pendingSearch,
-    setPendingSearch,
+    topK,
+    setTopK,
   } = useAppStore();
 
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -106,8 +62,7 @@ export default function AssistantPage() {
   const [streamingContent, setStreamingContent] = React.useState("");
   const [currentStage, setCurrentStage] = React.useState<string | undefined>();
   const [stageMessage, setStageMessage] = React.useState<string | undefined>();
-  const [selectedTraceStep, setSelectedTraceStep] = React.useState<TraceStep | null>(null);
-  const [streamingMetadata, setStreamingMetadata] = React.useState<Partial<MessageMetadata> | null>(null);
+
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -117,14 +72,6 @@ export default function AssistantPage() {
   React.useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  // Handle search from top bar
-  React.useEffect(() => {
-    if (pendingSearch && !isLoading) {
-      executeSearch(pendingSearch);
-      setPendingSearch(null);
-    }
-  }, [pendingSearch]);
 
   const executeSearch = async (query: string) => {
     const userMessage: Message = {
@@ -139,7 +86,7 @@ export default function AssistantPage() {
     setStreamingContent("");
     setCurrentStage(undefined);
     setStageMessage(undefined);
-    setStreamingMetadata(null);
+
 
     try {
       const response = await fetch("/api/search-stream", {
@@ -148,7 +95,7 @@ export default function AssistantPage() {
         body: JSON.stringify({
           query,
           limit: topK,
-          mode: vectorMode,
+          mode: "graphrag",
         }),
       });
 
@@ -165,12 +112,10 @@ export default function AssistantPage() {
 
       let accumulatedContent = "";
       let metadata: Partial<MessageMetadata> = {
-        collection: activeCollection || "biomedical_papers",
-        vectorMode: vectorMode as "dense" | "sparse" | "hybrid",
+        collection: "biomedical_papers",
         query,
         results: [],
         trace: [],
-        latency: 0,
       };
 
       while (true) {
@@ -191,18 +136,55 @@ export default function AssistantPage() {
                   setStageMessage(data.message);
                   break;
 
-                case "metadata":
+                case "metadata": {
+                  const trace = data.trace || [];
+                  // Extract rich results from the first trace step (Qdrant search)
+                  // since the top-level results lack payload data
+                  const qdrantTrace = trace.find((t: { name: string }) =>
+                    t.name?.includes("retrieve") || t.name?.includes("search")
+                  );
+                  const traceResults = qdrantTrace?.results;
+                  const richResults = Array.isArray(traceResults)
+                    ? traceResults.map((r: Record<string, unknown>) => {
+                        const payload = r.payload as Record<string, unknown> | undefined;
+                        const paper = (payload?.paper || payload || {}) as Record<string, unknown>;
+                        return {
+                          id: String(r.id || ""),
+                          score: Number(r.score || 0),
+                          title: String(paper.title || "Untitled"),
+                          abstract: String(paper.abstract || ""),
+                          authors: Array.isArray(paper.authors)
+                            ? paper.authors.map((a: unknown) => {
+                                if (typeof a === "string") return a;
+                                if (typeof a === "object" && a !== null) {
+                                  const obj = a as Record<string, unknown>;
+                                  return String(obj.name || obj.full_name || obj.label || JSON.stringify(a));
+                                }
+                                return String(a);
+                              }).filter(Boolean)
+                            : [],
+                          journal: String(paper.journal || ""),
+                          year: String(paper.publication_date || paper.year || ""),
+                          pmid: String(paper.pmid || ""),
+                        };
+                      })
+                    : data.results || [];
+                  const slicedResults = richResults.slice(0, topK);
+                  // Patch trace so Qdrant step reflects topK
+                  const patchedTrace = trace.map((t: Record<string, unknown>) => {
+                    if (t === qdrantTrace) {
+                      return { ...t, result_count: slicedResults.length, results: (traceResults as unknown[]).slice(0, topK) };
+                    }
+                    return t;
+                  });
                   metadata = {
                     ...metadata,
-                    results: data.results || [],
-                    trace: data.trace || [],
-                    latency: data.metadata?.totalLatency || 0,
-                    qdrant_results: data.metadata?.qdrant_results,
-                    neo4j_results: data.metadata?.neo4j_results,
-                    toolsUsed: data.metadata?.toolsUsed,
+                    results: slicedResults,
+                    trace: patchedTrace,
                   };
-                  setStreamingMetadata(metadata);
+                  // metadata updated for final message
                   break;
+                }
 
                 case "content":
                   accumulatedContent += data.text;
@@ -222,7 +204,7 @@ export default function AssistantPage() {
                   setStreamingContent("");
                   setCurrentStage(undefined);
                   setStageMessage(undefined);
-                  setStreamingMetadata(null);
+              
                   break;
 
                 case "error":
@@ -246,7 +228,7 @@ export default function AssistantPage() {
       setStreamingContent("");
       setCurrentStage(undefined);
       setStageMessage(undefined);
-      setStreamingMetadata(null);
+  
     } finally {
       setIsLoading(false);
     }
@@ -270,32 +252,33 @@ export default function AssistantPage() {
         {/* Header */}
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="min-w-0">
-            <h1 className="text-lg md:text-xl font-semibold">Assistant</h1>
+            <h1 className="text-lg md:text-xl font-semibold">Biomedical CoPilot</h1>
             <p className="text-xs md:text-sm text-[var(--text-secondary)] truncate">
-              Collection: {activeCollection || "pubmed_papers"} | Mode: {vectorMode} |
-              top_k: {topK}
+              GraphRAG search over biomedical literature
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
+          {!artifactsPaneOpen && (
+            <button
               onClick={toggleArtifactsPane}
-              className="gap-2 text-xs md:text-sm"
+              className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all border bg-[var(--bg-2)] border-[var(--stroke-1)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--stroke-2)]"
             >
-              <span className="hidden sm:inline">{artifactsPaneOpen ? "Hide" : "Show"} Artifacts</span>
-              <span className="sm:hidden">{artifactsPaneOpen ? "Hide" : "Show"}</span>
-              {artifactsPaneOpen ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
+              Show Results & Trace
+            </button>
+          )}
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+          {messages.length === 0 && !isLoading && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <h2 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-2">
+                PubMed Navigator
+              </h2>
+              <p className="text-sm text-[var(--text-secondary)] max-w-md">
+                Ask biomedical research questions and get AI-generated answers grounded in PubMed literature and knowledge graphs.
+              </p>
+            </div>
+          )}
           {messages.map((message) => (
             <div
               key={message.id}
@@ -308,7 +291,7 @@ export default function AssistantPage() {
             >
               <div className="mb-1 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
                 <span className="font-medium">
-                  {message.role === "user" ? "You" : "Assistant"}
+                  {message.role === "user" ? "You" : "Biomedical CoPilot"}
                 </span>
                 <span>•</span>
                 <span>{message.timestamp.toLocaleTimeString()}</span>
@@ -322,44 +305,12 @@ export default function AssistantPage() {
               )}
               {message.role === "assistant" && message.metadata && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--stroke-1)] pt-3">
-                  <Chip variant="default">
-                    <Database className="h-3 w-3" />
-                    {message.metadata.collection}
-                  </Chip>
-                  <Chip variant="violet">
-                    <Zap className="h-3 w-3" />
-                    {message.metadata.vectorMode}
-                  </Chip>
                   <Chip variant="teal">
-                    <Clock className="h-3 w-3" />
-                    {formatLatency(message.metadata.latency || 0)}
+                    {message.metadata.trace?.length || 0} tools executed
                   </Chip>
-                  <div className="flex-1" />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setActiveArtifactTab("code");
-                      if (!artifactsPaneOpen) toggleArtifactsPane();
-                    }}
-                  >
-                    <Code className="h-4 w-4 mr-1" />
-                    Show code
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setActiveArtifactTab("results");
-                      if (!artifactsPaneOpen) toggleArtifactsPane();
-                    }}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-1" />
-                    Open results
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Pin className="h-4 w-4" />
-                  </Button>
+                  <Chip variant="default">
+                    {message.metadata.results?.length || 0} Matches
+                  </Chip>
                 </div>
               )}
             </div>
@@ -370,7 +321,7 @@ export default function AssistantPage() {
           {streamingContent && (
             <div className="rounded-lg bg-[var(--bg-1)] p-4 animate-fade-in">
               <div className="mb-1 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-                <span className="font-medium">Assistant</span>
+                <span className="font-medium">Biomedical CoPilot</span>
                 <span>•</span>
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--emerald)]" />
@@ -387,15 +338,7 @@ export default function AssistantPage() {
         <div className="border-t border-[var(--stroke-1)] pt-3 md:pt-4">
           <div className="flex items-end gap-2">
             <div className="flex-1">
-              <div className="flex flex-wrap md:flex-nowrap items-center gap-2 rounded-lg border border-[var(--stroke-1)] bg-[var(--bg-1)] p-2">
-                <div className="hidden md:flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Paperclip className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <FileText className="h-4 w-4" />
-                  </Button>
-                </div>
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--stroke-1)] bg-[var(--bg-1)] p-2">
                 <input
                   type="text"
                   value={input}
@@ -409,50 +352,45 @@ export default function AssistantPage() {
                   placeholder="Ask about genes, diseases..."
                   className="flex-1 min-w-0 bg-transparent text-sm md:text-base text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
                 />
-                <div className="flex items-center gap-1 md:gap-2">
-                  <Select
-                    value={vectorMode}
-                    onValueChange={(v) => setVectorMode(v as typeof vectorMode)}
-                  >
-                    <SelectTrigger className="h-8 w-20 md:w-28 border-0 bg-[var(--bg-2)] text-xs md:text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="graphrag">GraphRAG</SelectItem>
-                      <SelectItem value="dense">Dense</SelectItem>
-                      <SelectItem value="sparse">Sparse</SelectItem>
-                      <SelectItem value="hybrid">Hybrid</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={topK.toString()}
-                    onValueChange={(v) => setTopK(parseInt(v))}
-                  >
-                    <SelectTrigger className="h-8 w-14 md:w-16 border-0 bg-[var(--bg-2)] text-xs md:text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="primary"
-                    size="icon"
-                    onClick={handleSend}
-                    disabled={!input.trim() || isLoading}
-                    className="h-8 w-8"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
+                <Button
+                  variant="primary"
+                  size="icon"
+                  onClick={handleSend}
+                  disabled={!input.trim() || isLoading}
+                  className="h-8 w-8"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-1 border-l border-[var(--stroke-1)] pl-2">
+                  <span className="text-[10px] text-[var(--text-tertiary)] uppercase">Top K</span>
+                  {[1, 3, 5].map((k) => (
+                    <button
+                      key={k}
+                      onClick={() => setTopK(k)}
+                      className={cn(
+                        "w-6 h-6 rounded text-xs font-medium transition-all",
+                        topK === k
+                          ? "bg-[var(--violet)]/20 text-[var(--violet)]"
+                          : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                      )}
+                    >
+                      {k}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
-          <div className="mt-2 hidden md:flex items-center gap-4 text-xs text-[var(--text-tertiary)]">
-            <span>Enter to send, Shift+Enter for new line</span>
-            <span>⌘/ to toggle trace</span>
+          <div className="mt-2 flex items-center justify-center text-xs text-[var(--text-tertiary)]">
+            <div className="flex items-center gap-4">
+              <span className="text-[10px] uppercase tracking-wider">Powered by</span>
+              <a href="https://qdrant.tech" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-[80px] h-[28px] rounded bg-white hover:bg-gray-100 transition-all">
+                <Image src="/qdrant-wordmark-dark.png" alt="Qdrant" width={64} height={18} className="object-contain" />
+              </a>
+              <a href="https://neo4j.com" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-[80px] h-[28px] rounded bg-white hover:bg-gray-100 transition-all">
+                <Image src="/neo4j-logo.png" alt="Neo4j" width={64} height={18} className="object-contain" />
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -465,59 +403,52 @@ export default function AssistantPage() {
             onValueChange={(v) => setActiveArtifactTab(v as typeof activeArtifactTab)}
             className="h-full flex flex-col"
           >
-            <TabsList className="px-4 pt-4">
-              <TabsTrigger value="results">Results</TabsTrigger>
-              <TabsTrigger value="point">Point</TabsTrigger>
-              <TabsTrigger value="code">Code</TabsTrigger>
-              <TabsTrigger value="trace">Trace</TabsTrigger>
-            </TabsList>
+            <div className="flex items-center justify-between px-4 pt-4">
+              <TabsList>
+                <TabsTrigger value="results">Vector Search Results</TabsTrigger>
+                <TabsTrigger value="trace">Trace</TabsTrigger>
+              </TabsList>
+              <button
+                onClick={toggleArtifactsPane}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-2)] transition-all"
+              >
+                Hide
+              </button>
+            </div>
 
             <TabsContent value="results" className="flex-1 overflow-y-auto p-4">
               {lastAssistantMessage?.metadata?.results && lastAssistantMessage.metadata.results.length > 0 ? (
                 <div className="space-y-2">
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-4">
                     <span className="text-sm text-[var(--text-secondary)]">
-                      {lastAssistantMessage.metadata.results.length} results
+                      {lastAssistantMessage.metadata.results.length} Matches
                     </span>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(
-                            JSON.stringify(lastAssistantMessage.metadata?.results, null, 2)
-                          );
-                        }}
-                      >
-                        <Copy className="h-4 w-4 mr-1" />
-                        Export JSON
-                      </Button>
-                    </div>
                   </div>
                   {lastAssistantMessage.metadata.results.map((result) => {
-                    const paper = result.payload?.paper;
-                    const pmid = paper?.pmid || String(result.id);
-                    const title = paper?.title || "Untitled";
-                    const authors = paper?.authors?.slice(0, 2).map((a: { name?: string }) => a.name).join(", ");
-                    const journal = paper?.journal;
+                    const pmid = result.pmid || result.id || "";
+                    const title = result.title || "Untitled";
+                    const authors = result.authors?.slice(0, 3).join(", ");
+                    const journal = result.journal || "";
+                    const year = result.year || "";
 
                     return (
                       <div
                         key={String(result.id)}
-                        className={cn(
-                          "cursor-pointer rounded-lg border border-[var(--stroke-1)] p-3 transition-colors hover:bg-[var(--bg-2)]",
-                          selectedPoint?.id === result.id &&
-                            "bg-[var(--selection)] border-[var(--blue)]"
-                        )}
-                        onClick={() => {
-                          setSelectedPoint(result);
-                          setActiveArtifactTab("point");
-                        }}
+                        className="rounded-lg border border-[var(--stroke-1)] p-3 hover:bg-[var(--bg-2)] transition-colors"
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <code className="text-xs text-[var(--text-tertiary)]">
-                            PMID:{pmid}
-                          </code>
+                          {pmid ? (
+                            <a
+                              href={`https://pubmed.ncbi.nlm.nih.gov/${pmid}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-[var(--blue)] hover:underline"
+                            >
+                              PMID: {pmid}
+                            </a>
+                          ) : (
+                            <code className="text-xs text-[var(--text-tertiary)]">{result.id}</code>
+                          )}
                           <Chip variant="blue">{result.score.toFixed(3)}</Chip>
                         </div>
                         <p className="text-sm font-medium line-clamp-2">{title}</p>
@@ -526,9 +457,9 @@ export default function AssistantPage() {
                             {authors}
                           </p>
                         )}
-                        {journal && (
+                        {(journal || year) && (
                           <p className="text-xs text-[var(--text-tertiary)]">
-                            {journal}
+                            {[journal, year].filter(Boolean).join(" · ")}
                           </p>
                         )}
                       </div>
@@ -542,411 +473,15 @@ export default function AssistantPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="point" className="flex-1 overflow-y-auto p-4">
-              {selectedPoint ? (
-                <div className="space-y-4">
-                  {(() => {
-                    const paper = (selectedPoint.payload as { paper?: Record<string, unknown> })?.paper || selectedPoint.payload;
-                    const pmid = String(paper?.pmid || selectedPoint.id || "");
-                    const title = paper?.title as string;
-                    const abstract = paper?.abstract as string;
-                    const authors = paper?.authors as Array<{ name?: string }>;
-                    const journal = paper?.journal as string;
-                    const pubDate = paper?.publication_date as string;
-                    const meshTerms = paper?.mesh_terms as Array<{ term?: string }>;
-
-                    return (
-                      <>
-                        <div className="flex items-center justify-between">
-                          <code className="text-sm text-[var(--violet)]">
-                            PMID:{pmid}
-                          </code>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => navigator.clipboard.writeText(JSON.stringify(selectedPoint, null, 2))}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            {pmid && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(`https://pubmed.ncbi.nlm.nih.gov/${pmid}`, "_blank")}
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <h3 className="mb-1 text-sm font-semibold">Score</h3>
-                          <Chip variant="blue">{selectedPoint.score.toFixed(4)}</Chip>
-                        </div>
-
-                        {title && (
-                          <div>
-                            <h3 className="mb-1 text-sm font-semibold">Title</h3>
-                            <p className="text-sm">{title}</p>
-                          </div>
-                        )}
-
-                        {authors && authors.length > 0 && (
-                          <div>
-                            <h3 className="mb-1 text-sm font-semibold">Authors</h3>
-                            <p className="text-sm text-[var(--text-secondary)]">
-                              {authors.map(a => a.name).join(", ")}
-                            </p>
-                          </div>
-                        )}
-
-                        {journal && (
-                          <div>
-                            <h3 className="mb-1 text-sm font-semibold">Journal</h3>
-                            <p className="text-sm text-[var(--text-secondary)]">{journal}</p>
-                          </div>
-                        )}
-
-                        {pubDate && (
-                          <div>
-                            <h3 className="mb-1 text-sm font-semibold">Publication Date</h3>
-                            <p className="text-sm text-[var(--text-secondary)]">{pubDate}</p>
-                          </div>
-                        )}
-
-                        {abstract && (
-                          <div>
-                            <h3 className="mb-1 text-sm font-semibold">Abstract</h3>
-                            <p className="text-sm text-[var(--text-secondary)] max-h-40 overflow-y-auto">
-                              {abstract}
-                            </p>
-                          </div>
-                        )}
-
-                        {meshTerms && meshTerms.length > 0 && (
-                          <div>
-                            <h3 className="mb-2 text-sm font-semibold">MeSH Terms</h3>
-                            <div className="flex flex-wrap gap-1">
-                              {meshTerms.map((m, i) => (
-                                <Chip key={i} variant="default" className="text-[10px]">
-                                  {m.term}
-                                </Chip>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        <div>
-                          <h3 className="mb-2 text-sm font-semibold">Raw Payload</h3>
-                          <pre className="rounded-lg bg-[#0B1220] p-4 text-xs overflow-x-auto max-h-48">
-                            {JSON.stringify(selectedPoint.payload, null, 2)}
-                          </pre>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center text-[var(--text-tertiary)]">
-                  Select a result to view details
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="code" className="flex-1 overflow-y-auto p-4">
-              {lastAssistantMessage?.metadata?.query ? (
-                <div className="space-y-4">
-                  {/* Python */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Chip variant="blue">Python</Chip>
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const code = `from qdrant_client import QdrantClient
-
-client = QdrantClient(url="YOUR_QDRANT_URL", api_key="YOUR_API_KEY")
-
-results = client.query_points(
-    collection_name="${lastAssistantMessage.metadata?.collection || "biomedical_papers"}",
-    query="${lastAssistantMessage.metadata?.query || ""}",
-    limit=${topK},
-    with_payload=True
-)
-
-for point in results.points:
-    print(f"ID: {point.id}, Score: {point.score}")
-    print(f"Title: {point.payload.get('paper', {}).get('title')}")`;
-                          navigator.clipboard.writeText(code);
-                        }}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <pre className="rounded-lg bg-[#0B1220] p-4 text-xs overflow-x-auto">
-{`from qdrant_client import QdrantClient
-
-client = QdrantClient(url="YOUR_QDRANT_URL", api_key="YOUR_API_KEY")
-
-results = client.query_points(
-    collection_name="${lastAssistantMessage.metadata?.collection || "biomedical_papers"}",
-    query="${lastAssistantMessage.metadata?.query || ""}",
-    limit=${topK},
-    with_payload=True
-)
-
-for point in results.points:
-    print(f"ID: {point.id}, Score: {point.score}")`}
-                    </pre>
-                  </div>
-
-                  {/* curl */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Chip variant="teal">curl</Chip>
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const code = `curl -X POST 'YOUR_QDRANT_URL/collections/${lastAssistantMessage.metadata?.collection || "biomedical_papers"}/points/query' \\
-  -H 'api-key: YOUR_API_KEY' \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "query": "${lastAssistantMessage.metadata?.query || ""}",
-    "limit": ${topK},
-    "with_payload": true
-  }'`;
-                          navigator.clipboard.writeText(code);
-                        }}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <pre className="rounded-lg bg-[#0B1220] p-4 text-xs overflow-x-auto">
-{`curl -X POST 'YOUR_QDRANT_URL/collections/${lastAssistantMessage.metadata?.collection || "biomedical_papers"}/points/query' \\
-  -H 'api-key: YOUR_API_KEY' \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "query": "${lastAssistantMessage.metadata?.query || ""}",
-    "limit": ${topK},
-    "with_payload": true
-  }'`}
-                    </pre>
-                  </div>
-
-                  {/* JavaScript */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Chip variant="violet">JavaScript</Chip>
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const code = `import { QdrantClient } from '@qdrant/js-client-rest';
-
-const client = new QdrantClient({
-  url: 'YOUR_QDRANT_URL',
-  apiKey: 'YOUR_API_KEY',
-});
-
-const results = await client.query('${lastAssistantMessage.metadata?.collection || "biomedical_papers"}', {
-  query: '${lastAssistantMessage.metadata?.query || ""}',
-  limit: ${topK},
-  with_payload: true,
-});
-
-console.log(results);`;
-                          navigator.clipboard.writeText(code);
-                        }}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <pre className="rounded-lg bg-[#0B1220] p-4 text-xs overflow-x-auto">
-{`import { QdrantClient } from '@qdrant/js-client-rest';
-
-const client = new QdrantClient({
-  url: 'YOUR_QDRANT_URL',
-  apiKey: 'YOUR_API_KEY',
-});
-
-const results = await client.query('${lastAssistantMessage.metadata?.collection || "biomedical_papers"}', {
-  query: '${lastAssistantMessage.metadata?.query || ""}',
-  limit: ${topK},
-  with_payload: true,
-});`}
-                    </pre>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center text-[var(--text-tertiary)]">
-                  Run a search to see code examples
-                </div>
-              )}
-            </TabsContent>
-
             <TabsContent value="trace" className="flex-1 overflow-y-auto p-4">
               <DetailedTracePanel
                 trace={lastAssistantMessage?.metadata?.trace || []}
-                qdrantResults={lastAssistantMessage?.metadata?.qdrant_results as Record<string, Array<{
-                  id: number | string;
-                  score?: number;
-                  payload?: {
-                    paper?: {
-                      pmid?: string;
-                      title?: string;
-                      abstract?: string;
-                      authors?: Array<{ name?: string }>;
-                      journal?: string;
-                      publication_date?: string;
-                      mesh_terms?: Array<{ term?: string }>;
-                    };
-                  };
-                }>>}
-                neo4jResults={lastAssistantMessage?.metadata?.neo4j_results as Record<string, unknown>}
-                totalLatency={lastAssistantMessage?.metadata?.latency}
-                toolsUsed={lastAssistantMessage?.metadata?.toolsUsed}
               />
             </TabsContent>
           </Tabs>
         </div>
       )}
 
-      {/* Bottom Trace Drawer */}
-      <div
-        className={cn(
-          "fixed bottom-0 right-0 border-t border-[var(--stroke-1)] bg-[var(--bg-1)] transition-all duration-300",
-          traceDrawerOpen ? "h-[280px] md:h-[360px]" : "h-10 md:h-11",
-          // Mobile: full width
-          "left-0",
-          // Desktop: account for sidebar
-          sidebarCollapsed ? "lg:left-[72px]" : "lg:left-[260px]"
-        )}
-      >
-        <button
-          onClick={toggleTraceDrawer}
-          className="flex h-10 md:h-11 w-full items-center justify-between px-3 md:px-4 hover:bg-[var(--bg-2)]"
-        >
-          <div className="flex items-center gap-2 md:gap-4 text-xs md:text-sm overflow-x-auto">
-            <span className="text-[var(--text-secondary)] hidden sm:inline">Total latency:</span>
-            <Chip variant="teal" className="text-xs">
-              {lastAssistantMessage?.metadata?.latency || 0}ms
-            </Chip>
-            <span className="text-[var(--text-secondary)] hidden sm:inline">Steps:</span>
-            <span className="text-[var(--text-secondary)] sm:hidden">S:</span>
-            <Chip variant="default" className="text-xs">
-              {lastAssistantMessage?.metadata?.trace?.length || 0}
-            </Chip>
-            <span className="text-[var(--text-secondary)] hidden sm:inline">Results:</span>
-            <span className="text-[var(--text-secondary)] sm:hidden">R:</span>
-            <Chip variant="default" className="text-xs">
-              {lastAssistantMessage?.metadata?.results?.length || 0}
-            </Chip>
-          </div>
-          {traceDrawerOpen ? (
-            <ChevronDown className="h-4 w-4 shrink-0" />
-          ) : (
-            <ChevronUp className="h-4 w-4 shrink-0" />
-          )}
-        </button>
-        {traceDrawerOpen && (
-          <div className="h-[calc(280px-40px)] md:h-[calc(360px-44px)] overflow-y-auto p-3 md:p-4">
-            {lastAssistantMessage?.metadata?.trace && lastAssistantMessage.metadata.trace.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
-                  <h3 className="mb-2 md:mb-3 text-sm font-semibold">Timeline</h3>
-                  <div className="space-y-2">
-                    {lastAssistantMessage.metadata.trace.map((step, i) => {
-                      const totalLatency = lastAssistantMessage.metadata?.latency || 1;
-                      const widthPercent = Math.max(5, ((step.duration || 0) / totalLatency) * 100);
-                      const colors = [
-                        "bg-[var(--blue)]",
-                        "bg-[var(--violet)]",
-                        "bg-[var(--teal)]",
-                        "bg-[var(--amaranth)]",
-                      ];
-                      return (
-                        <div
-                          key={i}
-                          className={cn(
-                            "flex items-center gap-2 cursor-pointer rounded p-1 -m-1 transition-colors hover:bg-[var(--bg-2)]",
-                            selectedTraceStep?.name === step.name && "bg-[var(--selection)]"
-                          )}
-                          onClick={() => setSelectedTraceStep(selectedTraceStep?.name === step.name ? null : step)}
-                        >
-                          <span className="w-36 text-xs text-[var(--text-secondary)] truncate">
-                            {step.name}
-                          </span>
-                          <div className="flex-1 h-5 rounded bg-[var(--bg-2)] relative">
-                            <div
-                              className={cn("h-full rounded flex items-center justify-end pr-2", colors[i % colors.length])}
-                              style={{ width: `${widthPercent}%` }}
-                            >
-                              <span className="text-[10px] text-white font-medium">
-                                {step.duration}ms
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold">
-                    {selectedTraceStep ? "Step Details" : "Raw Events"}
-                  </h3>
-                  {selectedTraceStep ? (
-                    <div className="space-y-3">
-                      <div>
-                        <span className="text-xs text-[var(--text-tertiary)]">Name</span>
-                        <p className="text-sm font-medium">{selectedTraceStep.name}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-[var(--text-tertiary)]">Duration</span>
-                        <p className="text-sm">{selectedTraceStep.duration}ms</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-[var(--text-tertiary)]">Start Time</span>
-                        <p className="text-sm">{selectedTraceStep.startTime}ms</p>
-                      </div>
-                      {selectedTraceStep.details && (
-                        <div>
-                          <span className="text-xs text-[var(--text-tertiary)]">Details</span>
-                          <pre className="mt-1 rounded bg-[#0B1220] p-2 text-[10px] overflow-x-auto max-h-32">
-                            {JSON.stringify(selectedTraceStep.details, null, 2)}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-1 text-xs font-mono text-[var(--text-secondary)]">
-                      {lastAssistantMessage.metadata.trace.map((step, i) => (
-                        <div key={i}>
-                          {String(step.startTime).padStart(5, "0")}ms {step.name.toLowerCase().replace(/\s+/g, "_")}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center text-[var(--text-tertiary)]">
-                No trace data. Run a search to see the execution timeline.
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
