@@ -306,10 +306,10 @@ export default function AssistantPage() {
               {message.role === "assistant" && message.metadata && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--stroke-1)] pt-3">
                   <Chip variant="teal">
-                    {message.metadata.trace?.length || 0} tools executed
+                    {(message.metadata.trace?.length ?? 0) - (message.metadata.trace?.at(-1)?.name?.toLowerCase().includes("summarize") ? 1 : 0)} tools executed
                   </Chip>
                   <Chip variant="default">
-                    {message.metadata.results?.length || 0} Matches
+                    Vector Search Results: {message.metadata.results?.length || 0}
                   </Chip>
                 </div>
               )}
@@ -421,13 +421,15 @@ export default function AssistantPage() {
                 <div className="space-y-2">
                   <div className="mb-4">
                     <span className="text-sm text-[var(--text-secondary)]">
-                      {lastAssistantMessage.metadata.results.length} Matches
+                      Vector Search Results: {lastAssistantMessage.metadata.results.length}
                     </span>
                   </div>
                   {lastAssistantMessage.metadata.results.map((result) => {
                     const pmid = result.pmid || result.id || "";
                     const title = result.title || "Untitled";
-                    const authors = result.authors?.slice(0, 3).join(", ");
+                    const authors = result.authors
+                      ? result.authors.slice(0, 3).join(", ") + (result.authors.length > 3 ? ", ..." : "")
+                      : undefined;
                     const journal = result.journal || "";
                     const year = result.year || "";
 
@@ -459,7 +461,9 @@ export default function AssistantPage() {
                         )}
                         {(journal || year) && (
                           <p className="text-xs text-[var(--text-tertiary)]">
-                            {[journal, year].filter(Boolean).join(" · ")}
+                            {journal && <span className="italic">{journal}</span>}
+                            {journal && year && " · "}
+                            {year}
                           </p>
                         )}
                       </div>
