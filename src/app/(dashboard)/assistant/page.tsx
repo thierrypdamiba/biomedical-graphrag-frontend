@@ -427,7 +427,9 @@ export default function AssistantPage() {
                   {lastAssistantMessage.metadata.results.map((result) => {
                     const pmid = result.pmid || result.id || "";
                     const title = result.title || "Untitled";
-                    const authors = result.authors?.slice(0, 3).join(", ");
+                    const authors = result.authors
+                      ? result.authors.slice(0, 3).join(", ") + (result.authors.length > 3 ? ", ..." : "")
+                      : undefined;
                     const journal = result.journal || "";
                     const year = result.year || "";
 
@@ -459,7 +461,9 @@ export default function AssistantPage() {
                         )}
                         {(journal || year) && (
                           <p className="text-xs text-[var(--text-tertiary)]">
-                            {[journal, year].filter(Boolean).join(" · ")}
+                            {journal && <span className="italic">{journal}</span>}
+                            {journal && year && " · "}
+                            {year}
                           </p>
                         )}
                       </div>
